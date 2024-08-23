@@ -98,35 +98,35 @@ const uploadEvent = catchAsyncErrors(async (req, res, next) => {
     }
 
     // Upload image to ImageKit
-    // const imageUploadResponse = await imagekit.upload({
-    //   file: image.data, // Use image.data for the file buffer
-    //   fileName: image.name, // Use image.name for the file name
-    //   folder: 'events', // Optional folder to organize images
-    // });
+    const imageUploadResponse = await imagekit.upload({
+      file: image.data, // Use image.data for the file buffer
+      fileName: image.name, // Use image.name for the file name
+      folder: 'events', // Optional folder to organize images
+    });
 
-    // const imageUrl = imageUploadResponse.url; // URL of the uploaded image
+    const imageUrl = imageUploadResponse.url; // URL of the uploaded image
 
-    // // Create a new event instance
-    // const event = new Event({
-    //   title,
-    //   userId,
-    //   description,
-    //   location,
-    //   date: new Date(date),
-    //   price,
-    //   eventType,
-    //   image: {
-    //     url: imageUrl,
-    //     fieldId: imageUploadResponse.fileId,
-    //   },
-    // });
+    // Create a new event instance
+    const event = new Event({
+      title,
+      userId,
+      description,
+      location,
+      date: new Date(date),
+      price,
+      eventType,
+      image: {
+        url: imageUrl,
+        fieldId: imageUploadResponse.fileId,
+      },
+    });
 
-    // // Ensure `event` is an instance of the Mongoose model
-    // console.log('Event Instance:', event);
-    // console.log('Event Instance Type:', event.constructor.name);
+    // Ensure `event` is an instance of the Mongoose model
+    console.log('Event Instance:', event);
+    console.log('Event Instance Type:', event.constructor.name);
 
     // Save the event to the database
-    // await event.save();
+    await event.save();
 
     // Send success response
     res.status(201).json({
@@ -237,6 +237,28 @@ console.log(event)
   });
 });
 
+const searchEvents=catchAsyncErrors(async(req,res,next)=>{
+  const query = req.query.query || '';
+
+    try {
+        // Perform a case-insensitive search for events
+        const events = await Event.find({
+            $or: [
+                { title: { $regex: query, $options: 'i' } },
+                { description: { $regex: query, $options: 'i' } },
+                { location: { $regex: query, $options: 'i' } },
+                { eventType: { $regex: query, $options: 'i' } },
+            ],
+        }).exec();
+        console.log(events)
+
+        res.json(events);
+    } catch (error) {
+        console.error('Error fetching events:', error);
+        res.status(500).json({ error: 'An error occurred while searching for events.' });
+    }
+})
+
 module.exports = {
     registerUser,
     currentUser,
@@ -245,5 +267,6 @@ module.exports = {
     getAllEvents,
     toggleFavourite,
     favoriteEvent,
-    getEventDetailsById
+    getEventDetailsById,
+    searchEvents
 };

@@ -1,4 +1,4 @@
-const { currentUser, registerUser, loginUser,getEventDetailsById,getAllEvents, uploadEvent,toggleFavourite, favoriteEvent } = require("../controllers/userController");
+const { currentUser, registerUser,searchEvents, loginUser,getEventDetailsById,getAllEvents, uploadEvent,toggleFavourite, favoriteEvent } = require("../controllers/userController");
 const express=require('express');
 const { isAuthenticated } = require("../middlewares/auth");
 const router=express.Router()
@@ -18,4 +18,6 @@ router.post('/toggle-favorite',isAuthenticated,toggleFavourite)
 router.get('/getFavoriteEvents',favoriteEvent)
 
 router.get('/getEvent/:id',getEventDetailsById)
+
+router.get('/events/search',searchEvents);
 module.exports=router
