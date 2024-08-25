@@ -333,6 +333,8 @@ console.log(req.body)
   // Respond with success message
   res.status(200).json({ message: 'Password reset successful' });
 });
+
+
 module.exports = {
     registerUser,
     currentUser,
