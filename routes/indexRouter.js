@@ -1,4 +1,4 @@
-const { currentUser, registerUser,searchEvents, loginUser,getEventDetailsById,getAllEvents, uploadEvent,toggleFavourite, favoriteEvent } = require("../controllers/userController");
+const { currentUser, registerUser,searchEvents,yourEvents,requestOtp, loginUser,getEventDetailsById,getAllEvents, uploadEvent,toggleFavourite, favoriteEvent, verifyOtp } = require("../controllers/userController");
 const express=require('express');
 const { isAuthenticated } = require("../middlewares/auth");
 const router=express.Router()
@@ -20,4 +20,10 @@ router.get('/getFavoriteEvents',favoriteEvent)
 router.get('/getEvent/:id',getEventDetailsById)
 
 router.get('/events/search',searchEvents);
+
+router.get('/your-events/:id',isAuthenticated,yourEvents)
+
+router.post('/request-otp',requestOtp)
+
+router.post('/verify-otp',verifyOtp)
 module.exports=router

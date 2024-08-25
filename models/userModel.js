@@ -22,6 +22,10 @@ const userSchema = new mongoose.Schema({
         minlength: [4, "Password should be at least 4 characters long"], // Validation for minimum length of the password.
         required: [true, 'Password is required'], // Ensures that password is a required field.
     },
+    otp:{
+        type: String,
+        default:-1
+    }
 }, { timestamps: true }); // `timestamps: true` automatically adds `createdAt` and `updatedAt` fields.
 
 // Pre-save middleware to hash the password before saving the user document.

@@ -5,6 +5,7 @@ const ErrorHandler = require('../utils/ErrorHandler');
 const imagekit=require('../utils/imagekit').initimagekit()
 const Event=require('../models/eventModel')
 const FavoriteEvent=require('../models/favorite')
+const {sendmail}=require('../utils/nodemailer')
 // Middleware to handle async errors
 const currentUser = catchAsyncErrors(async (req, res, next) => {
   try {
@@ -259,6 +260,79 @@ const searchEvents=catchAsyncErrors(async(req,res,next)=>{
     }
 })
 
+const yourEvents = catchAsyncErrors(async (req, res, next) => {
+  try {
+    const { id } = req.params; // Assuming the userId is available in req.user
+
+    // Fetch events from the database that match the userId
+    const events = await Event.find({ userId:id });
+
+    // Return the user's events
+    res.status(200).json({
+      success: true,
+      events,
+    });
+  } catch (error) {
+    next(error); // Pass error to the error handling middleware
+  }
+});
+
+// Controller to request OTP for password reset
+const requestOtp = catchAsyncErrors(async (req, res, next) => {
+  const { email } = req.body;
+
+  // Check if user exists
+  const user = await User.findOne({ email });
+  if (!user) {
+      return next(new ErrorHandler('User not found', 404));
+  }
+
+  // Generate OTP and store in user document
+  const otp = Math.floor(100000 + Math.random() * 900000); // 6-digit OTP
+  user.otp = otp;
+  await user.save();
+
+  // Send OTP via email
+  await sendmail(req,res,next, otp);
+
+  res.status(200).json({
+      success: true,
+      message: 'OTP sent successfully',
+  });
+});
+
+const verifyOtp = catchAsyncErrors(async (req, res, next) => {
+  const { email, otp, newPassword } = req.body;
+console.log(req.body)
+  if (!email || !otp || !newPassword) {
+    return res.status(400).json({ message: 'All fields are required' });
+  }
+
+  // Find the user by email
+  const user = await User.findOne({ email });
+  
+  if (!user) {
+    return res.status(400).json({ message: 'User not found' });
+  }
+
+  // Check if the provided OTP matches the stored OTP
+  if (user.otp !== otp) {
+    console.log(user.otp == otp)
+    return res.status(400).json({ message: 'Invalid OTP' });
+  }
+
+
+  user.password = newPassword
+
+  // Reset OTP
+  user.otp = -1;
+
+  // Save the updated user
+  await user.save();
+
+  // Respond with success message
+  res.status(200).json({ message: 'Password reset successful' });
+});
 module.exports = {
     registerUser,
     currentUser,
@@ -268,5 +342,8 @@ module.exports = {
     toggleFavourite,
     favoriteEvent,
     getEventDetailsById,
-    searchEvents
+    searchEvents,
+    yourEvents,
+    requestOtp,
+    verifyOtp
 };
