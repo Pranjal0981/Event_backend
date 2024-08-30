@@ -9,6 +9,7 @@ const cookieParser = require('cookie-parser');
 const logger = require('morgan')
 const indexRouter = require('./routes/indexRouter');
 const fileupload=require('express-fileupload')
+const Razorpay = require('razorpay');
 const PORT = process.env.PORT || 3001;
 const app = express();
 require('./models/config');
@@ -44,6 +45,7 @@ app.get('/', (req, res) => {
     res.send('Hello');
 });
 
+    
 app.use('/user', indexRouter);
 
 app.all("*", (req, res, next) => {

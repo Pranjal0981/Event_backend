@@ -6,6 +6,9 @@ const imagekit=require('../utils/imagekit').initimagekit()
 const Event=require('../models/eventModel')
 const FavoriteEvent=require('../models/favorite')
 const {sendmail}=require('../utils/nodemailer')
+const crypto = require('crypto');
+const Razorpay = require('razorpay');
+const Payment=require('../models/payment')
 // Middleware to handle async errors
 const currentUser = catchAsyncErrors(async (req, res, next) => {
   try {
@@ -32,7 +35,7 @@ console.log(userId)
 const registerUser = catchAsyncErrors(async (req, res, next) => {
     try {
         const { name, email, phoneNumber, password } = req.body;
-
+        console.log(req.body)
         // Check if user already exists
         const existingUser = await User.findOne({ email });
         if (existingUser) {
@@ -238,27 +241,31 @@ console.log(event)
   });
 });
 
-const searchEvents=catchAsyncErrors(async(req,res,next)=>{
+const searchEvents = catchAsyncErrors(async (req, res, next) => {
   const query = req.query.query || '';
 
-    try {
-        // Perform a case-insensitive search for events
-        const events = await Event.find({
-            $or: [
-                { title: { $regex: query, $options: 'i' } },
-                { description: { $regex: query, $options: 'i' } },
-                { location: { $regex: query, $options: 'i' } },
-                { eventType: { $regex: query, $options: 'i' } },
-            ],
-        }).exec();
-        console.log(events)
+  try {
+    // Perform a case-insensitive search across multiple fields
+    const events = await Event.find({
+      $or: [
+        { location: { $regex: query, $options: 'i' } },
+        { title: { $regex: query, $options: 'i' } },
+        { description: { $regex: query, $options: 'i' } },
+        { eventType: { $regex: query, $options: 'i' } },
+      ]
+    }).exec();
 
-        res.json(events);
-    } catch (error) {
-        console.error('Error fetching events:', error);
-        res.status(500).json({ error: 'An error occurred while searching for events.' });
+    if (events.length === 0) {
+      return res.status(404).json({ message: 'No events found matching the query.' });
     }
-})
+
+    res.json(events);
+  } catch (error) {
+    console.error('Error fetching events:', error);
+    res.status(500).json({ error: 'An error occurred while searching for events.' });
+  }
+});
+
 
 const yourEvents = catchAsyncErrors(async (req, res, next) => {
   try {
@@ -335,6 +342,173 @@ console.log(req.body)
 });
 
 
+
+
+const axios = require('axios');
+
+var instance = new Razorpay({
+    key_id: process.env.RAZORPAY_API_KEY,
+    key_secret: process.env.RAZORPAY_API_SECRET
+});
+
+
+const checkout = catchAsyncErrors(async (req, res) => {
+  try {
+      const options = {
+          amount: Number(req.body.amount * 100), // Amount in paise
+          currency: 'INR',
+          receipt: req.body.receipt || 'receipt#1', // Optional receipt reference
+      };
+
+      console.log(instance)
+      const order = await new Promise((resolve, reject) => {
+          instance.orders.create(options, (err, order) => {
+              if (err) {
+                  return reject(err);
+              }
+              resolve(order);
+          });
+      });
+
+      console.log('Order created:', order);
+      res.status(200).json({
+          success: true,
+          order,
+      });
+  } catch (error) {
+      console.error('Error in checkout:', error);
+      res.status(500).json({
+          success: false,
+          error: 'Failed to create order',
+      });
+  }
+});
+
+const paymentVerification = catchAsyncErrors(async (req, res) => {
+  try {
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+      const body = `${razorpay_order_id}|${razorpay_payment_id}`;
+      const expectedSignature = crypto
+          .createHmac('sha256', process.env.RAZORPAY_API_SECRET)
+          .update(body.toString())
+          .digest('hex');
+
+      if (expectedSignature === razorpay_signature) {
+          await Payment.create({
+              razorpay_order_id,
+              razorpay_payment_id,
+              razorpay_signature,
+          });
+
+          res.status(200).json({
+              success: true,
+              message: 'Payment verification successful',
+              reference_id: razorpay_payment_id,
+          });
+      } else {
+          res.status(400).json({
+              success: false,
+              error: 'Payment verification failed',
+          });
+      }
+  } catch (error) {
+      console.error('Error in payment verification:', error);
+      res.status(500).json({
+          success: false,
+          error: 'Payment verification failed',
+      });
+  }
+});
+
+
+const logout = catchAsyncErrors(async (req, res, next) => {
+  res.clearCookie("token")
+  res.json({ message: "Successfully Signout" })
+})
+
+
+const deleteEvents = catchAsyncErrors(async (req, res, next) => {
+    try {
+      const { id } = req.params;
+  
+      // Find and delete the event by its ID
+      const event = await Event.findByIdAndDelete(id);
+  
+      if (!event) {
+        return res.status(404).json({
+          success: false,
+          message: 'Event not found'
+        });
+      }
+  
+      // Return a success response
+      res.status(200).json({
+        success: true,
+        message: 'Event deleted successfully'
+      });
+    } catch (error) {
+      // Handle any errors that occur
+      return next(error); // Forward the error to the global error handler
+    }
+  });
+  
+  const applyFilter = catchAsyncErrors(async (req, res, next) => {
+    try {
+      const { city, price, type } = req.query;
+  
+      // Parse query parameters and ensure they are arrays
+      const locations = Array.isArray(city) ? city : city ? [city] : [];
+      const prices = Array.isArray(price) ? price : price ? [price] : [];
+      const eventTypes = Array.isArray(type) ? type : type ? [type] : [];
+  
+      // Log the received filters for debugging
+      console.log('Locations:', locations);
+      console.log('Prices:', prices);
+      console.log('Event Types:', eventTypes);
+  
+      // Construct your query or filter logic here
+      const filters = {};
+  
+      if (locations.length > 0) {
+        filters.location = { $in: locations }; // Ensure location field matches
+      }
+  
+      if (prices.length > 0) {
+        // Convert prices to numbers and ensure they are valid
+        filters.price = { $in: prices.map(price => {
+          const num = Number(price.replace(/[^0-9.-]+/g, '')); // Remove non-numeric characters
+          return isNaN(num) ? null : num;
+        }).filter(num => num !== null) }; // Remove invalid numbers
+      }
+  
+      if (eventTypes.length > 0) {
+        filters.eventType = { $in: eventTypes }; // Ensure eventType field matches
+      }
+  
+      // Log the constructed filters
+      console.log('Constructed Filters:', filters);
+  
+      // Fetch data from the database (e.g., MongoDB)
+      const data = await Event.find(filters);
+  
+      // Log fetched data
+      console.log('Fetched Data:', data);
+  
+      // Respond with the filtered data
+      res.status(200).json({
+        success: true,
+        events: data,
+      });
+    } catch (error) {
+      // Pass errors to the global error handler
+      next(error);
+    }
+  });
+  ;
+  
+module.exports = applyFilter;
+
 module.exports = {
     registerUser,
     currentUser,
@@ -347,5 +521,10 @@ module.exports = {
     searchEvents,
     yourEvents,
     requestOtp,
-    verifyOtp
+    verifyOtp,
+    checkout,
+    paymentVerification,
+    logout,
+    deleteEvents,
+    applyFilter
 };

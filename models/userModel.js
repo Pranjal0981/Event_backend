@@ -25,6 +25,9 @@ const userSchema = new mongoose.Schema({
     otp:{
         type: String,
         default:-1
+    },
+    phoneNumber:{
+        type:String,
     }
 }, { timestamps: true }); // `timestamps: true` automatically adds `createdAt` and `updatedAt` fields.
 
