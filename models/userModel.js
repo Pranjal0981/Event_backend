@@ -26,9 +26,16 @@ const userSchema = new mongoose.Schema({
         type: String,
         default:-1
     },
+    address:{
+        type:String,
+    },
     phoneNumber:{
         type:String,
-    }
+    },
+    image: {
+        url: String,
+        fieldId: String,
+    },
 }, { timestamps: true }); // `timestamps: true` automatically adds `createdAt` and `updatedAt` fields.
 
 // Pre-save middleware to hash the password before saving the user document.

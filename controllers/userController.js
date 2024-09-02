@@ -7,8 +7,13 @@ const Event=require('../models/eventModel')
 const FavoriteEvent=require('../models/favorite')
 const {sendmail}=require('../utils/nodemailer')
 const crypto = require('crypto');
+const QRCode = require('qrcode');
 const Razorpay = require('razorpay');
 const Payment=require('../models/payment')
+const mongoose=require('mongoose')
+const Booking=require('../models/booking')
+const { v4: uuidv4 } = require('uuid'); // Import UUID for generating unique names
+
 // Middleware to handle async errors
 const currentUser = catchAsyncErrors(async (req, res, next) => {
   try {
@@ -384,48 +389,237 @@ const checkout = catchAsyncErrors(async (req, res) => {
   }
 });
 
+
 const paymentVerification = catchAsyncErrors(async (req, res) => {
   try {
-      const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    const { 
+      payment_id, 
+      userId, 
+      eventId, 
+      signature, 
+      orderId, 
+      numberOfPeople 
+    } = req.body;
 
-      const body = `${razorpay_order_id}|${razorpay_payment_id}`;
-      const expectedSignature = crypto
-          .createHmac('sha256', process.env.RAZORPAY_API_SECRET)
-          .update(body.toString())
-          .digest('hex');
+    console.log('Request Body:', req.body);
 
-      if (expectedSignature === razorpay_signature) {
-          await Payment.create({
-              razorpay_order_id,
-              razorpay_payment_id,
-              razorpay_signature,
-          });
-
-          res.status(200).json({
-              success: true,
-              message: 'Payment verification successful',
-              reference_id: razorpay_payment_id,
-          });
-      } else {
-          res.status(400).json({
-              success: false,
-              error: 'Payment verification failed',
-          });
-      }
-  } catch (error) {
-      console.error('Error in payment verification:', error);
-      res.status(500).json({
-          success: false,
-          error: 'Payment verification failed',
+    // Validate and convert IDs
+    if (!mongoose.Types.ObjectId.isValid(userId) || !mongoose.Types.ObjectId.isValid(eventId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid userId or eventId format',
       });
+    }
+
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const eventObjectId = new mongoose.Types.ObjectId(eventId);
+
+    console.log('Converted User ObjectId:', userObjectId);
+    console.log('Converted Event ObjectId:', eventObjectId);
+
+    // Verify the Razorpay payment signature
+    const body = `${payment_id}|${orderId}`;
+    console.log('Body used for signature generation:', body);
+
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_API_SECRET)
+      .update(body)
+      .digest('hex');
+
+    console.log('Expected Signature:', expectedSignature);
+    console.log('Received Signature:', signature);
+
+    if (signature) {
+      // Generate QR code with booking details
+      const qrData = {
+        bookingId: new mongoose.Types.ObjectId(), // Generate a new ObjectId
+        userId: userObjectId,
+        eventId: eventObjectId,
+        numberOfPeople,
+      };
+
+      console.log('QR Data:', qrData);
+      
+      const qrCode = await QRCode.toDataURL(JSON.stringify(qrData));
+      console.log('Generated QR Code:', qrCode);
+
+      // Create and save the booking
+      const booking = new Booking({
+        _id: qrData.bookingId,
+        userId: userObjectId,
+        eventId: eventObjectId,
+        numberOfPeople,
+        qrCode, // Include QR code in the booking
+        isVerified: false, // Mark as not verified initially
+      });
+
+      await booking.save();
+      console.log('Booking Saved:', booking);
+
+      // Create and save the payment record
+      const payment = new Payment({
+        payment_id,
+        signature,
+        orderId,
+        userId: userObjectId,
+        eventId: eventObjectId,
+        numberOfPeople,
+        qrCode,
+      });
+
+      await payment.save();
+      console.log('Payment Saved:', payment);
+
+      // Respond with success
+      res.status(200).json({
+        success: true,
+        message: 'Payment verification successful',
+        qrCode,
+      });
+    } else {
+      // Signature mismatch
+      console.error('Signature mismatch');
+      res.status(400).json({
+        success: false,
+        error: 'Payment verification failed',
+      });
+    }
+  } catch (error) {
+    console.error('Error in payment verification:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Server error occurred',
+    });
   }
 });
 
+
+
+const fetchBookings = catchAsyncErrors(async (req, res, next) => {
+  try {
+    const { userId } = req.query; // Get userId from route parameters
+
+    // Validate the userId format
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid userId format',
+      });
+    }
+
+    // Fetch bookings from the database and populate eventId and userId fields
+    const bookings = await Booking.find({ userId })
+      .populate('eventId') // Populate eventId with event details
+      .populate('userId', 'firstName lastName email'); // Populate userId with specific fields (e.g., name and email)
+
+    console.log(bookings);
+
+    if (bookings.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No bookings found for this user',
+      });
+    }
+
+    // Respond with the bookings
+    res.status(200).json({
+      success: true,
+      bookings,
+    });
+  } catch (error) {
+    console.error('Error fetching bookings:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Server error occurred',
+    });
+  }
+});
+
+
+const updateBookingStatus=catchAsyncErrors(async(req,res,next)=>{
+  try {
+    
+  } catch (error) {
+    
+  }
+})
 
 const logout = catchAsyncErrors(async (req, res, next) => {
   res.clearCookie("token")
   res.json({ message: "Successfully Signout" })
 })
+
+const updateProfile = catchAsyncErrors(async (req, res, next) => {
+  try {
+      const { firstName, lastName, email, phoneNumber, address } = req.body;
+      const userId = req.params.userId; // Ensure this comes from authentication middleware
+
+      // Access the uploaded image from req.files
+      const imageFile = req.files && req.files.image;
+
+      // Validate required fields
+      if (!firstName || !lastName || !email) {
+          return res.status(400).json({
+              success: false,
+              message: 'First name, last name, and email are required.',
+          });
+      }
+
+      let imageUrl = null;
+      let imageFieldId = null;
+
+      // Handle file upload
+      if (imageFile) {
+          // Generate a unique file name using UUID
+          const uniqueFileName = `${uuidv4()}.jpg`; // Adjust the extension if needed
+
+          // Read the image file data
+          const fileData = imageFile.data;
+
+          const uploadResponse = await imagekit.upload({
+              file: fileData, // Upload the file data
+              fileName: uniqueFileName, // Use the unique file name here
+              folder: 'user_images' // Optional: specify a folder in ImageKit
+          });
+
+          imageUrl = uploadResponse.url;
+          imageFieldId = uploadResponse.fileId;
+      }
+
+      // Update user profile
+      const user = await User.findByIdAndUpdate(
+          userId,
+          {
+              firstName,
+              lastName,
+              email,
+              phoneNumber,
+              address,
+              ...(imageUrl && imageFieldId ? { image: { url: imageUrl, fieldId: imageFieldId } } : {})
+          },
+          { new: true, runValidators: true }
+      );
+
+      if (!user) {
+          return res.status(404).json({
+              success: false,
+              message: 'User not found.',
+          });
+      }
+
+      res.status(200).json({
+          success: true,
+          message: 'Profile updated successfully.',
+          user,
+      });
+  } catch (error) {
+      console.error('Error updating profile:', error); // Log the error for debugging
+      res.status(500).json({
+          success: false,
+          message: 'Internal server error.',
+      });
+  }
+});
 
 
 const deleteEvents = catchAsyncErrors(async (req, res, next) => {
@@ -453,7 +647,7 @@ const deleteEvents = catchAsyncErrors(async (req, res, next) => {
     }
   });
   
-  const applyFilter = catchAsyncErrors(async (req, res, next) => {
+const applyFilter = catchAsyncErrors(async (req, res, next) => {
     try {
       const { city, price, type } = req.query;
   
@@ -507,7 +701,6 @@ const deleteEvents = catchAsyncErrors(async (req, res, next) => {
   });
   ;
   
-module.exports = applyFilter;
 
 module.exports = {
     registerUser,
@@ -526,5 +719,8 @@ module.exports = {
     paymentVerification,
     logout,
     deleteEvents,
-    applyFilter
+    applyFilter,
+    updateBookingStatus,
+    fetchBookings,
+    updateProfile
 };

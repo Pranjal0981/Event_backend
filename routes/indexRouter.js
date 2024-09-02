@@ -1,4 +1,4 @@
-const { currentUser, registerUser,applyFilter,logout,searchEvents,yourEvents,requestOtp, loginUser,getEventDetailsById,getAllEvents, uploadEvent,toggleFavourite, favoriteEvent, verifyOtp, paymentVerification, checkout,deleteEvents } = require("../controllers/userController");
+const { currentUser, registerUser,applyFilter,updateProfile,updateBookingStatus,logout,fetchBookings,searchEvents,yourEvents,requestOtp, loginUser,getEventDetailsById,getAllEvents, uploadEvent,toggleFavourite, favoriteEvent, verifyOtp, paymentVerification, checkout,deleteEvents } = require("../controllers/userController");
 const express=require('express');
 const { isAuthenticated } = require("../middlewares/auth");
 const router=express.Router()
@@ -31,10 +31,16 @@ router.post('/logout',isAuthenticated,logout)
 
 router.post("/checkout",isAuthenticated,checkout);
 
-router.post("/paymentverification", isAuthenticated,paymentVerification);
+router.post("/verify-payment", isAuthenticated,paymentVerification);
 
 router.delete('/deleteEvents/:id',isAuthenticated,deleteEvents)
 
 router.get('/applyFilters',applyFilter)
+
+router.post('/updateupdate-booking-status',isAuthenticated,updateBookingStatus)
+
+router.get('/fetchBookings',isAuthenticated,fetchBookings)
+
+router.put('/updateProfile/:userId',isAuthenticated,updateProfile)
 module.exports=router
 module.exports=router

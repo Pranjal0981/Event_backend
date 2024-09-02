@@ -1,17 +1,35 @@
-const mongoose = require('mongoose')
+const mongoose = require('mongoose');
 const paymentSchema = new mongoose.Schema({
-    razorpay_order_id: {
-        type: String,
-        required: true,
+    payment_id:{
+        type:String,
+        required:true,
     },
-    razorpay_payment_id: {
-        type: String,
-        required: true,
+    signature:{
+        type:String,
+        required:true,
     },
-    razorpay_signature: {
-        type: String,
-        required: true,
+    orderId:{
+        type:String,
+        required:true
     },
+    userId:{
+        type:mongoose.Schema.Types.ObjectId,
+        required:true,
+        ref:'User'
+    },
+    numberOfPeople:{
+        type:Number,
+        required:true
+    },
+    qrCode:{
+        type:String,
+        // required:true
+    },
+    eventId:{
+        type:mongoose.Schema.Types.ObjectId,
+        ref:'Event',
+        required:true
+    }
 });
 
 const Payment = mongoose.model("Payment", paymentSchema);
